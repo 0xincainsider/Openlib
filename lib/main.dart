@@ -14,6 +14,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Project imports:
 import 'package:openlib/services/database.dart' show MyLibraryDb;
+import 'package:openlib/ui/annas_bridge_widget.dart';
 import 'package:openlib/ui/mylibrary_page.dart';
 import 'package:openlib/ui/search_page.dart';
 import 'package:openlib/ui/settings_page.dart';
@@ -125,34 +126,40 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final selectedIndex = ref.watch(selectedIndexProvider);
 
     return Scaffold(
-      body: NotificationListener<UserScrollNotification>(
-        onNotification: (notification) {
-          if (notification.direction == ScrollDirection.reverse &&
-              _showExpandedHeader) {
-            setState(() => _showExpandedHeader = false);
-          } else if (notification.direction == ScrollDirection.forward &&
-              !_showExpandedHeader) {
-            setState(() => _showExpandedHeader = true);
-          }
-          return false;
-        },
-        child: Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: _showExpandedHeader ? kToolbarHeight : 0,
-              child: AppBar(
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                title: const Text("Openlib"),
-                titleTextStyle:
-                    Theme.of(context).textTheme.displayLarge,
-              ),
+      body: Stack(
+        children: [
+          NotificationListener<UserScrollNotification>(
+            onNotification: (notification) {
+              if (notification.direction == ScrollDirection.reverse &&
+                  _showExpandedHeader) {
+                setState(() => _showExpandedHeader = false);
+              } else if (notification.direction == ScrollDirection.forward &&
+                  !_showExpandedHeader) {
+                setState(() => _showExpandedHeader = true);
+              }
+              return false;
+            },
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: _showExpandedHeader ? kToolbarHeight : 0,
+                  child: AppBar(
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    title: const Text("Openlib"),
+                    titleTextStyle:
+                        Theme.of(context).textTheme.displayLarge,
+                  ),
+                ),
+                Expanded(
+                  child: _widgetOptions.elementAt(selectedIndex),
+                ),
+              ],
             ),
-            Expanded(
-              child: _widgetOptions.elementAt(selectedIndex),
-            ),
-          ],
-        ),
+          ),
+          // Invisible WebView that keeps the Anna's Archive session alive.
+          const AnnasBridge(),
+        ],
       ),
       bottomNavigationBar: SafeArea(
         child: GNav(

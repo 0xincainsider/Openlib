@@ -1,11 +1,9 @@
-// Flutter imports:
-import 'package:flutter/material.dart';
-
 // Package imports:
-import 'package:dio/dio.dart';
 import 'package:html/parser.dart' show parse;
 import 'package:html/dom.dart' as dom;
-import 'dart:convert';
+
+// Project imports:
+import 'package:openlib/services/annas_fetcher.dart';
 
 // ====================================================================
 // DATA MODELS
@@ -52,15 +50,25 @@ class BookInfoData extends BookData {
 // ANNA'S ARCHIVE SERVICE (ALL FIXES APPLIED)
 // ====================================================================
 
+/// Thrown when Anna's Archive responds with its DDoS-Guard / hCaptcha
+/// challenge. The UI should ask the user to solve it once in the in-app
+/// WebView (CaptchaPage); the session is then shared by the persistent
+/// WebView used for the requests.
+class CaptchaRequiredException implements Exception {
+  final String url;
+
+  CaptchaRequiredException(this.url);
+
+  @override
+  String toString() =>
+      'CaptchaRequiredException: verification required at $url';
+}
+
 class AnnasArchieve {
-  static const String baseUrl = "https://annas-archive.se";
+  static const String baseUrl = "https://annas-archive.gl";
 
-  final Dio dio = Dio();
-
-  Map<String, dynamic> defaultDioHeaders = {
-    "user-agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-  };
+  /// True when [html] is Anna's Archive's DDoS-Guard challenge page.
+  static bool isDdosGuardChallenge(String html) => html.contains('DDoS-Guard');
 
   String getMd5(String url) {
     final uri = Uri.parse(url);
@@ -253,42 +261,38 @@ class AnnasArchieve {
       String sort = "",
       String fileType = "",
       bool enableFilters = true}) async {
-    try {
-      final String encodedURL = urlEncoder(
-          searchQuery: searchQuery,
-          content: content,
-          sort: sort,
-          fileType: fileType,
-          enableFilters: enableFilters);
+    final String encodedURL = urlEncoder(
+        searchQuery: searchQuery,
+        content: content,
+        sort: sort,
+        fileType: fileType,
+        enableFilters: enableFilters);
 
-      final response = await dio.get(encodedURL,
-          options: Options(headers: defaultDioHeaders));
-      return _parser(response.data, fileType);
-    } on DioException catch (e) {
-        if (e.type == DioExceptionType.unknown) {
-            throw "socketException";
-        }
-        rethrow;
+    final String html = await AnnasFetcher.instance.fetchHtml(encodedURL);
+    if (isDdosGuardChallenge(html)) {
+      throw CaptchaRequiredException(encodedURL);
     }
+    if (html.startsWith('FETCH_ERROR:')) {
+      throw Exception(html);
+    }
+    return _parser(html, fileType);
   }
 
   Future<BookInfoData> bookInfo({required String url}) async {
-    try {
-      final response =
-          await dio.get(url, options: Options(headers: defaultDioHeaders));
-      BookInfoData? data = await _bookInfoParser(response.data, url);
-      if (data != null) {
-        // Here's where you might use _safeParse if the API returned a numeric field
-        // E.g., int pages = _safeParse(data.pages).toInt(); 
-        return data;
-      } else {
-        throw 'unable to get data';
-      }
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.unknown) {
-        throw "socketException";
-      }
-      rethrow;
+    final String html = await AnnasFetcher.instance.fetchHtml(url);
+    if (isDdosGuardChallenge(html)) {
+      throw CaptchaRequiredException(url);
+    }
+    if (html.startsWith('FETCH_ERROR:')) {
+      throw Exception(html);
+    }
+    BookInfoData? data = await _bookInfoParser(html, url);
+    if (data != null) {
+      // Here's where you might use _safeParse if the API returned a numeric field
+      // E.g., int pages = _safeParse(data.pages).toInt(); 
+      return data;
+    } else {
+      throw 'unable to get data';
     }
   }
 }

@@ -12,10 +12,12 @@ import 'package:openlib/services/share_book.dart';
 // import 'package:flutter_svg/svg.dart';
 
 // Project imports:
-import 'package:openlib/services/annas_archieve.dart' show BookInfoData;
+import 'package:openlib/services/annas_archieve.dart'
+    show BookInfoData, CaptchaRequiredException;
 import 'package:openlib/services/database.dart';
 import 'package:openlib/services/download_file.dart';
 import 'package:openlib/ui/components/book_info_widget.dart';
+import 'package:openlib/ui/components/captcha_error_widget.dart';
 import 'package:openlib/ui/components/error_widget.dart';
 import 'package:openlib/ui/components/file_buttons_widget.dart';
 import 'package:openlib/ui/components/snack_bar_widget.dart';
@@ -150,6 +152,15 @@ class BookInfoPage extends ConsumerWidget {
           //       )
           //     ],
           //   );
+          // } else if (err is CaptchaRequiredException) {
+          if (err is CaptchaRequiredException) {
+            return CaptchaErrorWidget(
+              onRetry: () {
+                // ignore: unused_result
+                ref.refresh(bookInfoProvider(url));
+              },
+            );
+          }
           // } else {
           return CustomErrorWidget(
             error: err,
