@@ -14,6 +14,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 // Project imports:
 import 'package:openlib/services/database.dart';
+import 'package:openlib/services/local_file_server.dart'
+    show LocalFileServer, getLocalIpv4Addresses;
 import 'package:openlib/ui/about_page.dart';
 import 'package:openlib/ui/components/page_title_widget.dart';
 
@@ -21,7 +23,11 @@ import 'package:openlib/state/state.dart'
     show
         themeModeProvider,
         openPdfWithExternalAppProvider,
-        openEpubWithExternalAppProvider;
+        openEpubWithExternalAppProvider,
+        localFileServerProvider,
+        localServerRunningProvider,
+        localServerPortProvider,
+        localServerAddressesProvider;
 
 Future<void> requestStoragePermission() async {
   bool permissionGranted = false;
@@ -49,6 +55,35 @@ Future<void> requestStoragePermission() async {
     }
   }
   print("Storage permission status: $permissionGranted");
+}
+
+Future<void> _toggleLocalServer(
+    BuildContext context, WidgetRef ref, bool enable) async {
+  MyLibraryDb dataBase = MyLibraryDb.instance;
+  final LocalFileServer server = ref.read(localFileServerProvider);
+
+  if (!enable) {
+    await server.stop();
+    ref.read(localServerRunningProvider.notifier).state = false;
+    ref.read(localServerAddressesProvider.notifier).state = [];
+    return;
+  }
+
+  try {
+    final dynamic dir =
+        await dataBase.getPreference('bookStorageDirectory');
+    final int port = await server.start(rootPath: dir.toString());
+    final List<String> addresses = await getLocalIpv4Addresses();
+    ref.read(localServerRunningProvider.notifier).state = true;
+    ref.read(localServerPortProvider.notifier).state = port;
+    ref.read(localServerAddressesProvider.notifier).state = addresses;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start server: $e')),
+      );
+    }
+  }
 }
 
 class SettingsPage extends ConsumerWidget {
@@ -165,6 +200,80 @@ class SettingsPage extends ConsumerWidget {
                   ),
                   Icon(Icons.folder),
                 ]),
+            Padding(
+              padding: const EdgeInsets.only(left: 5, right: 5, top: 10),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  color: Theme.of(context).colorScheme.tertiaryContainer,
+                ),
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            "Serve Books on Local Network",
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.tertiary,
+                            ),
+                          ),
+                        ),
+                        Switch(
+                          value: ref.watch(localServerRunningProvider),
+                          activeColor: Colors.red,
+                          onChanged: (bool value) =>
+                              _toggleLocalServer(context, ref, value),
+                        ),
+                      ],
+                    ),
+                    if (ref.watch(localServerRunningProvider)) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        "Open one of these addresses in a browser on the same network:",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final address
+                          in ref.watch(localServerAddressesProvider))
+                        SelectableText(
+                          "http://$address:${ref.watch(localServerPortProvider)}/",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                        ),
+                      if (ref.watch(localServerAddressesProvider).isEmpty)
+                        Text(
+                          "No network address found. Make sure Wi-Fi is enabled.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.tertiary,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Only devices on your local network can access it.",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
             _PaddedContainer(
               onClick: () {
                 Navigator.push(context,

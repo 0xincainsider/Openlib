@@ -73,6 +73,13 @@ class _CaptchaPageState extends State<CaptchaPage> {
             Expanded(
               child: InAppWebView(
                 initialUrlRequest: URLRequest(url: WebUri(widget.url)),
+                // Sin caché: fuerza la validación real contra el servidor y
+                // evita servir el reto DDoS-Guard obsoleto desde la caché del
+                // WebView (un reto cacheado se "resuelve" en falso y el
+                // reintento vuelve a caer en "Verification required").
+                initialSettings: InAppWebViewSettings(
+                  cacheMode: CacheMode.LOAD_NO_CACHE,
+                ),
                 onLoadStop: _onLoadStop,
               ),
             ),

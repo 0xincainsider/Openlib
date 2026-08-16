@@ -155,6 +155,7 @@ class BookInfoPage extends ConsumerWidget {
           // } else if (err is CaptchaRequiredException) {
           if (err is CaptchaRequiredException) {
             return CaptchaErrorWidget(
+              url: err.url,
               onRetry: () {
                 // ignore: unused_result
                 ref.refresh(bookInfoProvider(url));

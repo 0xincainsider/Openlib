@@ -4,6 +4,7 @@ import 'package:html/dom.dart' as dom;
 
 // Project imports:
 import 'package:openlib/services/annas_fetcher.dart';
+import 'package:openlib/services/html_detection.dart' as detect;
 
 // ====================================================================
 // DATA MODELS
@@ -64,11 +65,33 @@ class CaptchaRequiredException implements Exception {
       'CaptchaRequiredException: verification required at $url';
 }
 
+/// Thrown when Anna's Archive responds with its rate-limit / block page
+/// (too many requests). Retrying immediately only makes it worse; the user
+/// must wait a while.
+class RateLimitedException implements Exception {
+  @override
+  String toString() =>
+      "Demasiadas peticiones a Anna's Archive. Espera unos minutos antes de volver a intentarlo.";
+}
+
 class AnnasArchieve {
   static const String baseUrl = "https://annas-archive.gl";
 
+  /// URL donde debe resolverse el reto de verificación: la URL que realmente
+  /// falló con el captcha, no la home del dominio. Resolver el reto en la home
+  /// no garantiza que la URL concreta (p. ej. una búsqueda) deje de estar
+  /// bloqueada; eso hacía que el captcha no apareciera y se generaba el bucle
+  /// "Verification required" infinito.
+  static String captchaSolveUrl(String? failedUrl) {
+    if (failedUrl == null || failedUrl.isEmpty) return baseUrl;
+    return failedUrl;
+  }
+
   /// True when [html] is Anna's Archive's DDoS-Guard challenge page.
-  static bool isDdosGuardChallenge(String html) => html.contains('DDoS-Guard');
+  static bool isDdosGuardChallenge(String html) => detect.isChallengeHtml(html);
+
+  /// True when [html] is a rate-limit / block page (too many requests).
+  static bool isRateLimitedPage(String html) => detect.isRateLimitedHtml(html);
 
   String getMd5(String url) {
     final uri = Uri.parse(url);
@@ -269,6 +292,11 @@ class AnnasArchieve {
         enableFilters: enableFilters);
 
     final String html = await AnnasFetcher.instance.fetchHtml(encodedURL);
+    // El bloqueo por rate limit es una página con branding de DDoS-Guard,
+    // así que debe comprobarse ANTES que el reto de verificación.
+    if (isRateLimitedPage(html)) {
+      throw RateLimitedException();
+    }
     if (isDdosGuardChallenge(html)) {
       throw CaptchaRequiredException(encodedURL);
     }
@@ -280,6 +308,11 @@ class AnnasArchieve {
 
   Future<BookInfoData> bookInfo({required String url}) async {
     final String html = await AnnasFetcher.instance.fetchHtml(url);
+    // El bloqueo por rate limit es una página con branding de DDoS-Guard,
+    // así que debe comprobarse ANTES que el reto de verificación.
+    if (isRateLimitedPage(html)) {
+      throw RateLimitedException();
+    }
     if (isDdosGuardChallenge(html)) {
       throw CaptchaRequiredException(url);
     }

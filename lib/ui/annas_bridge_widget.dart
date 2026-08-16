@@ -27,15 +27,22 @@ class _AnnasBridgeState extends State<AnnasBridge> {
       // throttled; it is placed offscreen in the parent Stack.
       child: SizedBox(
         width: 1,
-        height: 1,          child: InAppWebView(
-            initialUrlRequest: URLRequest(url: WebUri(AnnasArchieve.baseUrl)),
-            onWebViewCreated: (controller) {
-              AnnasFetcher.instance.attach(controller);
-            },
-            onLoadStop: (controller, url) {
-              AnnasFetcher.instance.handleLoadStop(controller, url);
-            },
+        height: 1,
+        child: InAppWebView(
+          initialUrlRequest: URLRequest(url: WebUri(AnnasArchieve.baseUrl)),
+          // Sin caché: cada fetch revalida las cookies con el servidor. Sin esto,
+          // tras resolver el captcha el WebView puede servir la página de reto
+          // cacheada y el bucle "Verification required" nunca se rompe.
+          initialSettings: InAppWebViewSettings(
+            cacheMode: CacheMode.LOAD_NO_CACHE,
           ),
+          onWebViewCreated: (controller) {
+            AnnasFetcher.instance.attach(controller);
+          },
+          onLoadStop: (controller, url) {
+            AnnasFetcher.instance.handleLoadStop(controller, url);
+          },
+        ),
       ),
     );
   }

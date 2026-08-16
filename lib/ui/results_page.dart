@@ -134,6 +134,7 @@ class ResultPage extends ConsumerWidget {
         error: (error, stackTrace) {
           if (error is CaptchaRequiredException) {
             return CaptchaErrorWidget(
+              url: error.url,
               onRetry: () {
                 // ignore: unused_result
                 ref.refresh(app_state.searchProvider(searchQuery));

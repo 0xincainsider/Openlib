@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openlib/services/annas_archieve.dart';
 import 'package:openlib/services/database.dart';
 import 'package:openlib/services/files.dart';
+import 'package:openlib/services/local_file_server.dart';
 import 'package:openlib/services/open_library.dart';
 import 'package:openlib/services/goodreads.dart';
 // Assuming OpenLibrary, Goodreads, PenguinRandomHouse, BookDigits, and SubCategoriesTypeList are defined
@@ -95,6 +96,25 @@ final pdfCurrentPage = StateProvider.autoDispose<int>((ref) => 0);
 final totalPdfPage = StateProvider.autoDispose<int>((ref) => 0);
 final openPdfWithExternalAppProvider = StateProvider<bool>((ref) => false);
 final openEpubWithExternalAppProvider = StateProvider<bool>((ref) => false);
+
+// Local File Server States
+final localFileServerProvider =
+    Provider<LocalFileServer>((ref) => LocalFileServer());
+final localServerRunningProvider = StateProvider<bool>((ref) => false);
+final localServerPortProvider = StateProvider<int>((ref) => 0);
+final localServerAddressesProvider = StateProvider<List<String>>((ref) => []);
+
+// Captcha / Verification States
+// Momento a partir del cual se permite un nuevo intento de verificación.
+// Evita ráfagas de peticiones que disparan el rate limit de DDoS-Guard.
+final captchaCooldownUntilProvider = StateProvider<DateTime?>((ref) => null);
+
+/// Tiempo restante de cooldown (cero si ya se puede reintentar).
+Duration captchaCooldownRemaining(DateTime? until) {
+  if (until == null) return Duration.zero;
+  final remaining = until.difference(DateTime.now());
+  return remaining.isNegative ? Duration.zero : remaining;
+}
 
 // ====================================================================
 // DERIVED (COMPUTED) STATE PROVIDERS
