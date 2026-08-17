@@ -44,6 +44,37 @@ void main() {
     expect(res.headers['content-disposition'], contains('attachment'));
   });
 
+  test('muestra el nombre real de los archivos (no "Instance of '
+      'HtmlEscape")', () async {
+    final res = await http.get(Uri.parse('http://127.0.0.1:$port/'));
+    expect(res.statusCode, 200);
+    expect(res.body, isNot(contains("Instance of 'HtmlEscape'")));
+  });
+
+  test('Content-Disposition usa la forma doble RFC 6266: filename ASCII '
+      'limpio + filename*=UTF-8 para que el Kindle guarde bien el archivo',
+      () async {
+    File('${tempDir.path}/Ángeles y demonios.mobi').writeAsStringSync('x');
+    final res = await http.get(Uri.parse(
+        'http://127.0.0.1:$port/%C3%81ngeles%20y%20demonios.mobi'));
+    expect(res.statusCode, 200);
+    final disposition = res.headers['content-disposition']!;
+    expect(disposition, contains('attachment;'));
+    // Forma simple: solo ASCII (sin bytes no-ASCII que rompan al Kindle).
+    expect(disposition, contains('filename="_ngeles y demonios.mobi"'));
+    // Forma RFC 5987 con el nombre real percent-encoded.
+    expect(disposition, contains(
+        "filename*=UTF-8''%C3%81ngeles%20y%20demonios.mobi"));
+  });
+
+  test('escapa caracteres especiales del nombre en el listing', () async {
+    File('${tempDir.path}/Harry & Potter.epub').writeAsStringSync('x');
+    final res = await http.get(Uri.parse('http://127.0.0.1:$port/'));
+    expect(res.statusCode, 200);
+    expect(res.body, contains('Harry &amp; Potter.epub'));
+    expect(res.body, isNot(contains("Instance of 'HtmlEscape'")));
+  });
+
   test('lista subdirectorios', () async {
     final res =
         await http.get(Uri.parse('http://127.0.0.1:$port/carpeta/'));
@@ -77,6 +108,29 @@ void main() {
       expect(res.body, isNot(contains('TOP SECRET')));
       expect(res.statusCode, isNot(200));
     }
+  });
+
+  test('lista y sirve un archivo ajeno a la app añadido con el servidor '
+      'corriendo (p.ej. un .mobi de Calibre), transmitiéndolo byte a byte',
+      () async {
+    // Archivo NO descargado ni convertido por la app: se simula copiarlo a la
+    // carpeta servida (vía ADB/MTP/carpeta compartida) con el servidor activo.
+    final List<int> mobiBytes = List<int>.generate(2048, (i) => i % 251);
+    File('${tempDir.path}/calibre_externo.mobi').writeAsBytesSync(mobiBytes);
+
+    // Aparece en el directory listing sin filtros de biblioteca/extensión.
+    final listing = await http.get(Uri.parse('http://127.0.0.1:$port/'));
+    expect(listing.statusCode, 200);
+    expect(listing.body, contains('calibre_externo.mobi'));
+
+    // Se descarga idéntico: mismos bytes, tamaño y Content-Type correctos.
+    final res = await http
+        .get(Uri.parse('http://127.0.0.1:$port/calibre_externo.mobi'));
+    expect(res.statusCode, 200);
+    expect(res.bodyBytes, mobiBytes);
+    expect(res.headers['content-length'], '2048');
+    expect(res.headers['content-type'], 'application/x-mobipocket-ebook');
+    expect(res.headers['content-disposition'], contains('attachment'));
   });
 
   test('devuelve 404 para archivos inexistentes', () async {

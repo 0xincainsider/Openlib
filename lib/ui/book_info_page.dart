@@ -16,6 +16,7 @@ import 'package:openlib/services/annas_archieve.dart'
     show BookInfoData, CaptchaRequiredException;
 import 'package:openlib/services/database.dart';
 import 'package:openlib/services/download_file.dart';
+import 'package:openlib/services/files.dart' show applyDefaultDownloadName;
 import 'package:openlib/ui/components/book_info_widget.dart';
 import 'package:openlib/ui/components/captcha_error_widget.dart';
 import 'package:openlib/ui/components/error_widget.dart';
@@ -317,6 +318,14 @@ Future<void> downloadFileWidget(WidgetRef ref, BuildContext context,
             if (checkSum == true) {
               ref.read(checkSumState.notifier).state =
                   CheckSumProcessState.success;
+              // Nombre por defecto: el título de la biblioteca, saneado
+              // (sin espacios, emojis ni caracteres raros).
+              try {
+                await applyDefaultDownloadName(
+                    id: data.md5, title: data.title, format: data.format!);
+              } catch (_) {
+                // Si el renombrado falla, el archivo conserva `md5.format`.
+              }
             } else {
               ref.read(checkSumState.notifier).state =
                   CheckSumProcessState.failed;

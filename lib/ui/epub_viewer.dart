@@ -8,9 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:epub_view/epub_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
-import 'package:openlib/services/database.dart';
 
 // Project imports:
+import 'package:openlib/services/epub_repair.dart' show repairEpubFile;
 import 'package:openlib/services/files.dart' show getFilePath;
 import 'package:openlib/ui/components/snack_bar_widget.dart';
 import 'package:openlib/state/state.dart'
@@ -26,7 +26,6 @@ Future<void> launchEpubViewer({
   required WidgetRef ref,
 }) async {
   if (Platform.isAndroid || Platform.isIOS) {
-    MyLibraryDb dataBase = MyLibraryDb.instance;
     String path = await getFilePath(fileName);
     bool openWithExternalApp = ref.watch(openEpubWithExternalAppProvider);
 
@@ -35,6 +34,10 @@ Future<void> launchEpubViewer({
           linuxByProcess: true, type: "application/epub+zip");
     } else {
       try {
+        // Repara el OPF si la portada está mal declarada: epubx (y por tanto
+        // epub_view) rechaza el EPUB entero con "item with ID = ... is
+        // missing". No reescribe nada si el archivo ya está bien.
+        await repairEpubFile(path);
         // Push to internal Epub Viewer
         // ignore: use_build_context_synchronously
         Navigator.push(context,
@@ -47,9 +50,18 @@ Future<void> launchEpubViewer({
       }
     }
   } else {
-    Navigator.push(context, MaterialPageRoute(builder: (BuildContext context) {
-      return EpubViewerWidget(fileName: fileName);
-    }));
+    try {
+      final String path = await getFilePath(fileName);
+      await repairEpubFile(path);
+      // ignore: use_build_context_synchronously
+      Navigator.push(context,
+          MaterialPageRoute(builder: (BuildContext context) {
+        return EpubViewerWidget(fileName: fileName);
+      }));
+    } catch (e) {
+      // ignore: use_build_context_synchronously
+      showSnackBar(context: context, message: 'Unable to open epub!');
+    }
   }
 }
 

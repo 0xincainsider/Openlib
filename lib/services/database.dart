@@ -18,6 +18,10 @@ class MyBook {
   final String? description;
   final String? format;
 
+  /// Nombre real del archivo en disco (p.ej. `Mi Libro.epub`). Si es null,
+  /// el archivo se resuelve como `\$id.\$format` (nombre por defecto).
+  final String? fileName;
+
   MyBook(
       {required this.id,
       required this.title,
@@ -27,7 +31,8 @@ class MyBook {
       required this.publisher,
       required this.info,
       required this.format,
-      required this.description});
+      required this.description,
+      this.fileName});
 
   Map<String, dynamic> toMap() {
     return {
@@ -39,13 +44,14 @@ class MyBook {
       'publisher': publisher,
       'info': info,
       'format': format,
-      'description': description
+      'description': description,
+      'fileName': fileName
     };
   }
 
   @override
   String toString() {
-    return 'MyBook{id: $id,title: $title,author: $author,thumbnail: $thumbnail,link: $link,publisher: $publisher,info: $info,format: $format,description:$description}';
+    return 'MyBook{id: $id,title: $title,author: $author,thumbnail: $thumbnail,link: $link,publisher: $publisher,info: $info,format: $format,description:$description,fileName: $fileName}';
   }
 }
 
@@ -69,10 +75,10 @@ class MyLibraryDb {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (Database db, int version) async {
         await db.execute(
-            'CREATE TABLE mybooks (id TEXT PRIMARY KEY, title TEXT,author TEXT,thumbnail TEXT,link TEXT,publisher TEXT,info TEXT,format TEXT,description TEXT)');
+            'CREATE TABLE mybooks (id TEXT PRIMARY KEY, title TEXT,author TEXT,thumbnail TEXT,link TEXT,publisher TEXT,info TEXT,format TEXT,description TEXT,fileName TEXT)');
         await db.execute(
             'CREATE TABLE preferences (name TEXT PRIMARY KEY,value TEXT)');
         if (isMobile || true) {
@@ -90,6 +96,16 @@ class MyLibraryDb {
             where: 'name = ?', whereArgs: ['preferences']);
         List<dynamic> isbrowserOptionsExist = await db.query('sqlite_master',
             where: 'name = ?', whereArgs: ['browserOptions']);
+        if (oldVersion < 6) {
+          // Columna para el nombre renombrado del archivo descargado.
+          final columns = await db.rawQuery('PRAGMA table_info(mybooks)');
+          final hasFileName =
+              columns.any((column) => column['name'] == 'fileName');
+          if (!hasFileName) {
+            await db
+                .execute('ALTER TABLE mybooks ADD COLUMN fileName TEXT');
+          }
+        }
         if (isPreferenceTableExist.isEmpty) {
           await db.execute(
               'CREATE TABLE preferences (name TEXT PRIMARY KEY,value TEXT)');
@@ -178,9 +194,36 @@ class MyLibraryDb {
           publisher: maps[i]['publisher'],
           info: maps[i]['info'],
           format: maps[i]['format'],
-          description: maps[i]['description']);
+          description: maps[i]['description'],
+          fileName: maps[i]['fileName']);
     });
     return myBookList.reversed.toList();
+  }
+
+  /// Nombre de archivo guardado para [id], o null si nunca se renombró.
+  Future<String?> getStoredFileName(String id) async {
+    final dbInstance = await instance.database;
+    final data = await dbInstance.query(
+      tableName,
+      columns: ['fileName'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (data.isEmpty) {
+      return null;
+    }
+    return data[0]['fileName'] as String?;
+  }
+
+  /// Guarda el nombre de archivo renombrado para [id].
+  Future<void> updateFileName(String id, String fileName) async {
+    final dbInstance = await instance.database;
+    await dbInstance.update(
+      tableName,
+      {'fileName': fileName},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<void> saveBookState(String fileName, String position) async {

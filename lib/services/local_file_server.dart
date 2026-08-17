@@ -146,7 +146,7 @@ class LocalFileServer {
         ..writeln('<meta charset="utf-8">')
         ..writeln(
             '<meta name="viewport" content="width=device-width, initial-scale=1">')
-        ..writeln('<title>$_htmlEscape(title)</title>')
+        ..writeln('<title>${_htmlEscape.convert(title)}</title>')
         ..writeln('<style>')
         ..writeln('body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",'
             'Roboto,sans-serif;background:#fafafa;color:#1f1f1f;'
@@ -178,14 +178,14 @@ class LocalFileServer {
         if (FileSystemEntity.typeSync(entity.path, followLinks: false) ==
             FileSystemEntityType.directory) {
           html.writeln(
-              '<li><a class="folder" href="$href/">📁 $_htmlEscape(name)</a>'
+              '<li><a class="folder" href="$href/">📁 ${_htmlEscape.convert(name)}</a>'
               '<span class="meta">folder</span></li>');
         } else {
           final stat = entity.statSync();
           final size = _bytesToFileSize(stat.size);
           final modified = _formatDate(stat.modified);
           html.writeln(
-              '<li><a href="$href">📄 $_htmlEscape(name)</a>'
+              '<li><a href="$href">📄 ${_htmlEscape.convert(name)}</a>'
               '<span class="meta">$size · $modified</span></li>');
         }
       }
@@ -213,9 +213,7 @@ class LocalFileServer {
 
       response.headers.contentType = ContentType.parse(mime);
       response.headers.set(HttpHeaders.contentLengthHeader, stat.size);
-      response.headers.set(
-          'Content-Disposition',
-          'attachment; filename="${name.replaceAll('"', '')}"');
+      response.headers.set('Content-Disposition', _contentDisposition(name));
       response.addStream(file.openRead()).then((_) => response.close());
     } catch (_) {
       _sendError(response, HttpStatus.internalServerError,
@@ -229,7 +227,7 @@ class LocalFileServer {
     response.write(
         '<!DOCTYPE html><html><head><meta charset="utf-8">'
         '<title>$statusCode</title></head><body>'
-        '<h1>$statusCode — $_htmlEscape(message)</h1></body></html>');
+        '<h1>$statusCode — ${_htmlEscape.convert(message)}</h1></body></html>');
     response.close();
   }
 
@@ -255,6 +253,23 @@ class LocalFileServer {
 }
 
 const HtmlEscape _htmlEscape = HtmlEscape();
+
+/// Construye la cabecera `Content-Disposition` para la descarga de [fileName].
+///
+/// El navegador del Kindle solo acepta de forma fiable la forma simple
+/// `filename=` con un nombre ASCII limpio: si el servidor envía únicamente la
+/// forma RFC 5987 `filename*=UTF-8''...`, el Kindle rechaza el archivo o lo
+/// guarda con nombre/ubicación incorrectos (calibre-web issue #1149). Por eso
+/// se envían ambas formas: la simple con el nombre saneado a ASCII (la que
+/// usa el Kindle) y la RFC 5987 con el nombre real percent-encoded, para los
+/// clientes que la soportan.
+String _contentDisposition(String fileName) {
+  final simpleName = fileName
+      .replaceAll(RegExp(r'[^\x20-\x7E]'), '_')
+      .replaceAll('"', '');
+  final encodedName = Uri.encodeComponent(fileName);
+  return 'attachment; filename="$simpleName"; filename*=UTF-8\'\'$encodedName';
+}
 
 /// Devuelve las direcciones IPv4 locales (sin loopback) para mostrarlas
 /// como URL de acceso desde otros dispositivos de la red.
